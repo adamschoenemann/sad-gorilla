@@ -1,90 +1,64 @@
+// TODO: Make it work properly with stdin!
 
 import scala.collection.mutable.HashMap
-import scala.collection.mutable.ArrayBuffer
 import io.Source
-import util.matching._
 import java.lang.Math.{max}
-
+import Util._
 
 object Main {
 
-  type Char2dMap = Map[(Char,Char),Int]
-
-  case class LookupTable(map:Char2dMap) {
-
-    def lookup(i:Char, j:Char):Int = {
-
-      map.get((i,j)).get
-    }
-
-  }
-
+  // just a type alias for clarity
   type Protein = Seq[Char]
-
-  case class Array2D[A](arr:Array[A], rows:Int, cols:Int) {
-
-    // private val arr:Array[A] = Array.fill(cols*rows)(default)
-
-    def get(r:Int, c:Int):A =
-      try {arr(cols*r + c)}
-      catch {
-        case (e:IndexOutOfBoundsException) => {
-          println("Out of bounds: ", (r,c))
-          throw e
-        }
-      }
-
-    def set(r:Int, c:Int, x:A) =
-      arr(r * cols + c) = x
-
-    def print() = print2d(arr, rows, cols)
-
-    private def print2d(arr:Array[A], rows:Int, cols:Int) = {
-      for (r <- 0 until rows)
-        println(arr.slice(r*cols, r*cols+cols).mkString("\t"))
-    }
-  }
-
-  def testLookup = {
-    val map = new HashMap[(Char,Char), Int]
-    map.put(('A','A'),2)
-    map.put(('A','C'),-1)
-    map.put(('A','G'),1)
-    map.put(('A','T'),-1)
-    map.put(('C','A'),-1)
-    map.put(('C','C'),2)
-    map.put(('C','G'),-1)
-    map.put(('C','T'),1)
-    map.put(('G','A'),1)
-    map.put(('G','C'),-1)
-    map.put(('G','G'),2)
-    map.put(('G','T'),-1)
-    map.put(('T','A'),-1)
-    map.put(('T','C'),1)
-    map.put(('T','G'),-1)
-    map.put(('T','T'),2)
-    LookupTable(map.toMap)
-  }
 
   def main(args:Array[String]) {
 
-    val source = Source.fromFile("./data/BLOSUM62.txt")
+    val blosumSource = Source.fromFile("./data/BLOSUM62.txt")
+    val fastasSrc = getSource(args)
     try {
-      val lookup = parseBLOSUM(source.getLines.toSeq)
-      val sphinx = "KQRK".toList
-      val snark = "KQRIKAAKABK".toList
-      val s = "ACGGTAG".toIndexedSeq
-      val t = "CCTAAG".toIndexedSeq
-      val r = solve (lookup, -4) (sphinx, snark)
-      println(r)
-    } finally source.close()
+      val lookup = parseBLOSUM(blosumSource.getLines.toSeq)
+      val shiftCost = lookup.lookup('A', '-')
+      val (human :: fastas) = parseFASTAs(fastasSrc.getLines)
+      val humanProtein = human.proteins
+      fastas.map(fasta => {
+        fasta.label -> solveFun (lookup, shiftCost) (humanProtein, fasta.proteins)
+      }).sortBy(- _._2._1).foreach (result => {
+        val (label, (score, al1, al2)) = result
+        println(human.label + "--" + label + ": " + score)
+        println(al1)
+        println(al2)
+        println(List.fill (30) ('-') mkString)
+      })
+    } finally {
+      blosumSource.close()
+      fastasSrc.close();
+    }
 
   }
 
-  def unfoldRight[A,B] (seed:B) (f: B => Option[(A, B)]):List[A] = {
-    f(seed).map({case (a,s2) => a :: unfoldRight(s2)(f)}).getOrElse(Nil)
+  def getSource(args:Array[String]):Source = {
+    if (args.length == 1 && args(0) == "test")
+      Source.fromFile("./data/HbB_FASTAs-in.txt")
+    else
+      args.headOption.map(Source.fromFile(_))
+          .getOrElse(Source.stdin)
   }
 
+  // a FASTA has a label and a sequence of proteins
+  case class FASTA(label:String, proteins:IndexedSeq[Char])
+
+  // parse the fastas from a stream of lines
+  def parseFASTAs(iter:Iterator[String]):Seq[FASTA] = {
+    iter.grouped(4).foldLeft[List[FASTA]] (Nil) ((acc, fasta) => {
+      assert (fasta(0).startsWith(">"))
+      val label = fasta.head.tail.takeWhile(!_.isDigit).trim
+      val proteins = fasta.tail.mkString.toIndexedSeq
+      FASTA(label, proteins) :: acc
+    }).reverse
+  }
+
+
+  // imperative implementation of assemble, which assembles a solution from
+  // the "memory" generated from a solving function
   def assembleImp(table:LookupTable, memory:Array2D[Int], delta:Int)
                  (p1:Protein, p2:Protein)
                  :(String,String) = {
@@ -113,7 +87,7 @@ object Main {
   }
 
   // functional implementation of assemble
-  def assembleFun(table:LookupTable, memory:Array2D[Int], delta:Int)
+  def assembleFun(table:LookupTable, memory:Get2D[Int], delta:Int)
                  (p1:Protein, p2:Protein)
                  :(String,String) = {
 
@@ -143,13 +117,12 @@ object Main {
     (s1.mkString, s2.mkString)
   }
 
+  // an imperative bottom-up implementation of the string-matching algorithm
   def solve(table:LookupTable, delta:Int)(p1: Protein, p2:Protein):(Int,String,String) = {
 
     val rows = p1.length + 1
     val cols = p2.length + 1
-    // val memory = Array.fill (cols*rows) (0)
     val memory = Array2D(Array.fill(rows*cols)(0), rows, cols)
-
 
     for (i <- 0 until rows)
       memory.set(i, 0, delta * i)
@@ -175,90 +148,55 @@ object Main {
 
     (score, s1, s2)
 
-    // ------------------------------------------------
-    // Recursive impl!
-    // ------------------------------------------------
-    // def helper(xs:Protein, ys:Protein):Int = {
-    //   if (memory.contains((xs.length, ys.length)))
-    //     memory.get((xs.length, ys.length)).get
-    //   else {
-    //     val result =
-    //       if (xs.isEmpty) {
-    //         // inverse.put((xs.length, ys.length), ('-',ys.lastOption.getOrElse('-')))
-    //         ys.length * (-4)
-    //       } else if (ys.isEmpty) {
-    //         // inverse.put((xs.length, ys.length), (xs.lastOption.getOrElse('-'),'-'))
-    //         xs.length * (-4)
-    //       } else {
-    //         val x = xs.last
-    //         val y = ys.last
-    //         val alpha = table.lookup(x, y)
-    //         val del = -4
-    //         val r = List(alpha + helper(xs.init, ys.init),
-    //           del + helper(xs.init, ys),
-    //           del + helper(xs, ys.init)
-    //         ).max
-    //         // inverse.put((xs.length, ys.length), (x, y))
-    //         r
-    //       }
-    //     memory.put((xs.length, ys.length), result)
-
-    //     result
-    //   }
-
-    // }
-
-    // var out1 = ""
-    // var out2 = ""
-
-
-    // def findsol(i:Int, j:Int) = {
-    //   val a = memory((i,j))
-    //   val alpha = table.lookup(p1(i), p2(j))
-    //   if (a == alpha + memory((i-1, j-1))) {
-    //     out1 = out1 + p1(i)
-    //     out2 = out2 + p2(j)
-    //   }
-    // }
-
-
-    // val r = helper(p1, p2)
-    // // println(inverse((p1.length-2, p2.length-2)))
-    // // println(inverse)
-    // for (i <- 1 until p1.length) {
-    //   for (j <- 1 until p2.length) {
-    //     findsol(i,j)
-    //   }
-    // }
-    // println(out1)
-    // r
   }
 
-  def mkSolver(table:LookupTable) (memory:HashMap[(Char,Char),Int])
-           :(Protein, Protein) => (Int, (String,String)) = {
+  // A recursive, functional implementation of the string-matching algorithm
+  def solveFun(table:LookupTable, delta:Int)(p1:Protein, p2:Protein): (Int,String,String) = {
+    type Memory = Map[(Int,Int),Int]
 
-    // def helper(xs:Protein, ys:Protein):(Int, (String,String)) = {
-    //   if (xs.isEmpty)
-    //     (ys.length * (-4), (List.fill(ys.length)('-').mkString, ys.mkString))
-    //   else if (ys.isEmpty)
-    //     (xs.length * (-4), (xs.mkString, List.fill(xs.length)('-').mkString))
-    //   else {
-    //     val x = xs.last
-    //     val y = ys.last
-    //     val combs = List(('-',y),(x,y),(x,'-'))
-    //       .map({case (a,b) => {
-    //         val (m1, v1) = helper (xs.init, ys.init)
-    //         (table.lookup(a,b), (a, b))
-    //       }})
-    //     val max@(m,(a,b)) = combs.maxBy(_._1)
-    //     memory.put((a,b),m)
-    //     (m, (a.toString, b.toString))
-    //   }
-    // }
+    // import home-rolled State monad :D
+    import State._
+    def helper(xs:Protein, ys:Protein):State[Memory, Int] = {
 
-    // helper
-    // val m = Math.min(table.lookup('-',y), table.lookup(x,y), table.lookup(x,'-'))
-    ???
+      def help(memory:Memory):State[Memory,Int] = {
+        if (xs.isEmpty) {
+          val r = ys.length * delta
+          for {
+            _ <- put (memory.updated((0, ys.length), r))
+          } yield r
+        } else if (ys.isEmpty) {
+          val r = xs.length * delta
+          for {
+            _ <- put (memory.updated((xs.length, 0), r))
+          } yield r
+        } else if (memory.contains((xs.length, ys.length))) {
+          unit(memory.get((xs.length, ys.length)).get)
+        } else {
+          val x = xs.last
+          val y = ys.last
+          val alpha = table.lookup(x, y)
+          for {
+            r1 <- helper (xs.init, ys.init)
+            r2 <- helper (xs.init, ys)
+            r3 <- helper (xs, ys.init)
+            memory2 <- get[Memory] // IMPORTANT. get an "updated" version of memory here
+            m = max(alpha + r1, max(delta + r2, delta + r3))
+            _ <- put (memory2.updated((xs.length, ys.length), m))
+          } yield m
+        }
+      }
+
+      for {
+        memory <- get
+        m <- help (memory)
+      } yield m
+
+    }
+
+    val (score, memory) = helper(p1,p2).run(Map[(Int,Int),Int]())
+    val (s1, s2) = assembleFun(table, memory, delta) (p1, p2)
+    (score, s1, s2)
+
   }
 
   def parseBLOSUM(lines:Seq[String]):LookupTable = {
