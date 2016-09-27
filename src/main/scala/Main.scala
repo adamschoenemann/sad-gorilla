@@ -10,37 +10,70 @@ object Main {
   // just a type alias for clarity
   type Protein = Seq[Char]
 
+  def hasInput(src:Source):Boolean = ! (src.ch.toInt == 0)
   def main(args:Array[String]) {
 
     val blosumSource = Source.fromFile("./data/BLOSUM62.txt")
-    val fastasSrc = getSource(args)
     try {
-      val lookup = parseBLOSUM(blosumSource.getLines.toSeq)
-      val shiftCost = lookup.lookup('A', '-')
-      val (human :: fastas) = parseFASTAs(fastasSrc.getLines)
-      val humanProtein = human.proteins
-      fastas.map(fasta => {
-        fasta.label -> solveFun (lookup, shiftCost) (humanProtein, fasta.proteins)
-      }).sortBy(- _._2._1).foreach (result => {
-        val (label, (score, al1, al2)) = result
-        println(human.label + "--" + label + ": " + score)
-        println(al1)
-        println(al2)
-        println(List.fill (30) ('-') mkString)
+      withSource(args)(fastasSrc => {
+          val lookup = parseBLOSUM(blosumSource.getLines.toSeq)
+          // find "delta" by looking up shift with A
+          // A is chosen arbitrarily
+          val shiftCost = lookup.lookup('A', '-')
+          val fastas = parseFASTAs(fastasSrc.getLines)
+
+          // cheat and use a var here
+          var compared = Set[(String,String)]()
+
+          fastas.flatMap(fasta1 => {
+            fastas.flatMap(fasta2 => {
+              val (lbl1, lbl2) = (fasta1.label, fasta2.label)
+              if (lbl1 == lbl2 || compared.contains((lbl1, lbl2)) || compared.contains((lbl2,lbl1)))
+                Nil
+              else {
+                // change solve to solveFun to use functional implementation
+                val result = solve (lookup, shiftCost) (fasta1.proteins, fasta2.proteins)
+                compared = compared + ((lbl1, lbl2))
+                List(((lbl1, lbl2), result))
+              }
+            })
+          })
+          .sortBy({case ((lbl1, lbl2), (score, al1, al2)) => - score})
+          .foreach (result => {
+            val ((lbl1, lbl2), (score, al1, al2)) = result
+            println(lbl1 + "--" + lbl2 + ": " + score)
+            println(al1)
+            println(al2)
+            // println(List.fill (30) ('-') mkString) // print divider
+          })
       })
     } finally {
       blosumSource.close()
-      fastasSrc.close();
     }
 
   }
 
-  def getSource(args:Array[String]):Source = {
-    if (args.length == 1 && args(0) == "test")
-      Source.fromFile("./data/HbB_FASTAs-in.txt")
-    else
-      args.headOption.map(Source.fromFile(_))
-          .getOrElse(Source.stdin)
+  def withSource(args:Array[String])(f:Source => Unit):Unit = {
+    if (args.length == 1 && args(0) == "test") {
+      val src = Source.fromFile("./data/HbB_FASTAs-in.txt")
+      f(src)
+      src.close()
+    }
+    else {
+      args.headOption.map({ s =>
+        val src = Source.fromFile(s)
+        f(src)
+        src.close()
+      }).orElse({
+          println("Call with an path to an input file or")
+          println("call with argument \"test\" to test on ./data/Hbb_FASTAs-in.txt")
+          println("Reading from stdin...")
+          println("Press Ctrl-Z on Windows or Ctrl-D on Unix to quit")
+          f(Source.stdin)
+          None
+        })
+      ()
+    }
   }
 
   // a FASTA has a label and a sequence of proteins
@@ -49,6 +82,7 @@ object Main {
   // parse the fastas from a stream of lines
   def parseFASTAs(iter:Iterator[String]):Seq[FASTA] = {
     iter.grouped(4).foldLeft[List[FASTA]] (Nil) ((acc, fasta) => {
+
       assert (fasta(0).startsWith(">"))
       val label = fasta.head.tail.takeWhile(!_.isDigit).trim
       val proteins = fasta.tail.mkString.toIndexedSeq

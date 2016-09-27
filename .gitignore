@@ -1,3 +1,4 @@
 *.class
 target
 *.pdf
+results.txt
