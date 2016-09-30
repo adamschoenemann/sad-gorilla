@@ -1,4 +1,13 @@
-# Gorilla or Sea Cucumber
+---
+documentclass: scrartcl
+title: Gorilla or Sea Cucumber
+author:
+- Oscar Felipe Toro
+- Adam Schønemann
+- Andreas Jakobsen
+- Henrik Sloth Schade
+subtitle: "Group 14, Algorithm Design"
+---
 
 ## Results
 Our implementation produces the expected results on all pairs of
@@ -7,31 +16,42 @@ species.
 The closest species to Human is the Gorilla , with the following
 optimal alignment
 
-Human--Gorilla: 777
-MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH
-MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFKLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANALAHKYH
+    Human--Gorilla: 777
+    MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKV
+    KAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFRLLGNVLVCVLAHHFGKE
+    FTPPVQAAYQKVVAGVANALAHKYH
+    
+    MVHLTPEEKSAVTALWGKVNVDEVGGEALGRLLVVYPWTQRFFESFGDLSTPDAVMGNPKV
+    KAHGKKVLGAFSDGLAHLDNLKGTFATLSELHCDKLHVDPENFKLLGNVLVCVLAHHFGKE
+    FTPPVQAAYQKVVAGVANALAHKYH
 
 the most distant species is the Sea-Cucumber with the following optimal alignment:
 
-Human--Sea-Cucumber: 80
-M-V--H--LTPEEKSAVTALWGK-V-NVDEVGGEALGRLLVVY-PWTQRFFESFGDLSTPDAVMGNPKVKAHGKKVLGAFSDGLAHLD-N-LKGTFATLSELHCDKLH-VDPENFRLLGNVLVCVLAHHFGKEFTPPVQAAYQKVVAGVANA-LAHKYH
-LAIQAQGDLTLAQKKIVRKTWHQLMRNKTSFVTDVFIRIF-AYDPSAQNKFPQMAGMSA-SQLRSSRQMQAHAIRVSSIMSEYVEELDSDILPELLATLARTH-D-LNKVGADHYNLFAKVLMEALQAELGSDFNEKTRDAWAKAFS-VVQAVLLVKHG
-
-------------------------------
-
+    Human--Sea-Cucumber: 80
+    M-V--H--LTPEEKSAVTALWGK-V-NVDEVGGEALGRLLVVY-PWTQRFFESFGDLSTPD
+    AVMGNPKVKAHGKKVLGAFSDGLAHLD-N-LKGTFATLSELHCDKLH-VDPENFRLLGNVL
+    VCVLAHHFGKEFTPPVQAAYQKVVAGVANA-LAHKYH
+    
+    LAIQAQGDLTLAQKKIVRKTWHQLMRNKTSFVTDVFIRIF-AYDPSAQNKFPQMAGMSA-S
+    QLRSSRQMQAHAIRVSSIMSEYVEELDSDILPELLATLARTH-D-LNKVGADHYNLFAKVL
+    MEALQAELGSDFNEKTRDAWAKAFS-VVQAVLLVKHG
 
 ## Implementation details
+There are two approaches to the problem, an imperative solution (`assambleImp`) and
+a functional solution (`assambleFun`) which uses a `State` Monad.
 
-There are two approaches to the problem, an imperative solution (assambleImp) and
-a functional solution (assambleFun) wich is using a state Monad the only difference between the two
-is that the former is using mutable variables whereas the second one is usnig immutable variables.
+- Functional solution
+    - No mutable state
+    - Recursion instead of iteration
+    - Top-down computation
+    - Uses a `Map[(Int,Int),Int]` for memoization
+    - Uses a State monad
+      using `unfoldRight`
+- Imperative solution
+    - Lots of mutable state
+    - Uses nested for loops for iteration
+    - Computes the result bottom-up
+    - Uses a 2D array for memoization
 
-The imperative solution use a bottom up approach while creating the table.
-It runs through $m*n$ calculations. Each calculation is done in constant time so the total runing time is $O(m*m)$
-
-The recursive implementation computes the result  from the top to the bottom. 
-Our implementation uses $O(nm)$ time since the lookup table has $n*m$ cells and we compute each cell only once. 
-
-We chose a recursive/iterative implementation. For two sequences
-of length n and m, respectively, our implementation uses O (( n 3 +
-log 2 m ) cos n ) time and O ( 1 ) space
+Both solutions runs through $m ⋅ n$ calcuations, and since each calculation is
+done in constant time, the total running time is $O(m ⋅ n)$.

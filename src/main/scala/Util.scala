@@ -64,4 +64,5 @@ object Util {
   def unfoldRight[A,B] (seed:B) (f: B => Option[(A, B)]):List[A] = {
     f(seed).map({case (a,s2) => a :: unfoldRight(s2)(f)}).getOrElse(Nil)
   }
+
 }
